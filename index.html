@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biconnected Components - Tarjan's Algorithm</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; min-height: 100vh; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
+        .header p { font-size: 1.1em; line-height: 1.6; max-width: 900px; margin: 0 auto; opacity: 0.95; }
+        .controls { padding: 25px; background: #f8f9fa; border-bottom: 2px solid #e9ecef; }
+        .input-group { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px; align-items: flex-end; }
+        .input-field { flex: 1; min-width: 200px; }
+        .input-field label { display: block; margin-bottom: 5px; font-weight: 600; color: #495057; font-size: 0.9em; }
+        .input-field input { width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 1em; transition: border-color 0.3s; }
+        .input-field textarea { width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 1em; font-family: 'Courier New', monospace; transition: border-color 0.3s; resize: vertical; }
+        .input-field textarea:focus { outline: none; border-color: #667eea; }
+        .button-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        button { padding: 12px 24px; border: none; border-radius: 8px; font-size: 1em; font-weight: 600; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4); }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #5a6268; transform: translateY(-2px); }
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:hover { background: #218838; transform: translateY(-2px); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+        .main-content { display: flex; gap: 20px; padding: 25px; }
+        .visualization { flex: 1; border: 2px solid #e9ecef; border-radius: 10px; background: white; position: relative; min-height: 600px; }
+        .sidebar { width: 300px; display: flex; flex-direction: column; gap: 20px; }
+        .panel { background: #f8f9fa; border-radius: 10px; padding: 20px; border: 2px solid #e9ecef; }
+        .panel h3 { color: #495057; margin-bottom: 15px; font-size: 1.2em; border-bottom: 2px solid #667eea; padding-bottom: 8px; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 12px; gap: 10px; }
+        .legend-color { width: 30px; height: 30px; border-radius: 5px; border: 2px solid #495057; }
+        .legend-line { width: 40px; height: 3px; border-radius: 2px; }
+        .legend-text { font-size: 0.95em; color: #495057; }
+        .stats { display: grid; gap: 10px; }
+        .stat-item { background: white; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #667eea; }
+        .stat-label { font-weight: 600; color: #495057; font-size: 0.9em; }
+        .stat-value { font-size: 1.3em; font-weight: 700; color: #667eea; }
+        #svg-container { width: 100%; height: 100%; }
+        .node { cursor: move; }
+        .node-circle { fill: #6c757d; stroke: #343a40; stroke-width: 2px; transition: all 0.3s; }
+        .node-circle.visiting { fill: #ffc107; stroke: #ff6b6b; stroke-width: 4px; }
+        .node-circle.visited { fill: #28a745; stroke: #1e7e34; }
+        .node-circle.articulation { fill: #dc3545; stroke: #bd2130; stroke-width: 4px; }
+        .node-label { font-size: 14px; font-weight: 600; fill: white; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+        .node-info { font-size: 11px; font-weight: 600; fill: #495057; text-anchor: middle; pointer-events: none; }
+        .link { stroke: #adb5bd; stroke-width: 2px; fill: none; }
+        .link.tree-edge { stroke: #28a745; stroke-width: 3px; }
+        .link.back-edge { stroke: #6c757d; stroke-width: 2px; stroke-dasharray: 5,5; }
+        .link.bridge { stroke: #dc3545; stroke-width: 5px; }
+        .link.active { stroke: #ffc107; stroke-width: 4px; }
+        .steps-panel { max-height: 400px; overflow-y: auto; background: white; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 0.9em; }
+        .step { padding: 4px 0; border-bottom: 1px solid #eee; }
+        .step.current { background: #fff3cd; font-weight: bold; }
+        @media (max-width: 1024px) { .main-content { flex-direction: column; } .sidebar { width: 100%; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Biconnected Components Visualizer</h1>
+            <p>Tarjan's algorithm – step-by-step discovery of articulation points, bridges and biconnected components.</p>
+        </div>
+
+        <div class="controls">
+            <div class="input-group">
+                <div class="input-field">
+                    <label for="numNodes">Number of Nodes:</label>
+                    <input type="number" id="numNodes" value="7" min="2" max="20">
+                </div>
+                <div class="input-field" style="flex: 2;">
+                    <label for="edges">Edges (one per line, format: 1 2):</label>
+                    <textarea id="edges" rows="3">1 2
+2 3
+3 1
+3 4
+4 5
+5 6
+6 4</textarea>
+                </div>
+            </div>
+            <div class="button-group">
+                <button class="btn-primary" onclick="visualizeGraph()">Visualize Graph</button>
+                <button class="btn-success" id="startTraversal" onclick="startTraversal()" disabled>Start DFS</button>
+                <button class="btn-secondary" onclick="restartLayout()">Restart Layout</button>
+                <button class="btn-secondary" onclick="toggleLabels()">Toggle Labels</button>
+                <button class="btn-secondary" onclick="exportPNG()">Export PNG</button>
+            </div>
+            <div class="button-group" id="stepControls" style="margin-top:10px; display:none;">
+                <button class="btn-secondary" onclick="prevStep()">Prev</button>
+                <button class="btn-primary" id="playBtn" onclick="playPause()">Play</button>
+                <button class="btn-secondary" onclick="nextStep()">Next</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="visualization">
+                <div id="svg-container"></div>
+            </div>
+
+            <div class="sidebar">
+                <div class="panel">
+                    <h3>Statistics</h3>
+                    <div class="stats">
+                        <div class="stat-item"><span class="stat-label">Nodes</span><span class="stat-value" id="statNodes">0</span></div>
+                        <div class="stat-item"><span class="stat-label">Edges</span><span class="stat-value" id="statEdges">0</span></div>
+                        <div class="stat-item"><span class="stat-label">Articulation Points</span><span class="stat-value" id="statArticulation">0</span></div>
+                        <div class="stat-item"><span class="stat-label">Bridges</span><span class="stat-value" id="statBridges">0</span></div>
+                        <div class="stat-item"><span class="stat-label">Biconnected Comps</span><span class="stat-value" id="statComponents">0</span></div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>DFS Steps</h3>
+                    <div id="stepsList" class="steps-panel"></div>
+                </div>
+
+                <div class="panel">
+                    <h3>Legend</h3>
+                    <div class="legend-item"><div class="legend-color" style="background:#6c757d;"></div><span class="legend-text">Unvisited Node</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background:#ffc107;border-color:#ff6b6b;"></div><span class="legend-text">Visiting</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background:#28a745;"></div><span class="legend-text">Visited</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background:#dc3545;"></div><span class="legend-text">Articulation Point</span></div>
+                    <div class="legend-item"><div class="legend-line" style="background:#28a745;"></div><span class="legend-text">Tree Edge</span></div>
+                    <div class="legend-item"><div class="legend-line" style="background:#6c757d;"></div><span class="legend-text">Back Edge (dashed)</span></div>
+                    <div class="legend-item"><div class="legend-line" style="background:#dc3545;height:5px;"></div><span class="legend-text">Bridge (Red)</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ---------- Global state ----------
+        let svg, simulation, link, node, nodeLabel, nodeInfo;
+        let graphData = { nodes: [], links: [] };
+        let adjacencyList = {};
+        let showLabels = true;
+
+        // Tarjan variables
+        let discoveryTime = {}, lowLink = {}, parent = {}, visited = {};
+        let articulationPoints = new Set();
+        let bridges = [];
+        let biconnectedComponents = [];
+        let time = 0;
+        let edgeStack = [];
+
+        // Animation
+        let animationSteps = [];
+        let currentStep = 0;
+        let isAnimating = false;
+        let stepLogs = [];
+        let playInterval = null;
+
+        // ---------- SVG ----------
+        function initSVG() {
+            d3.select('#svg-container').selectAll('*').remove();
+            const container = document.getElementById('svg-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight || 600;
+
+            svg = d3.select('#svg-container')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            simulation = d3.forceSimulation()
+                .force('link', d3.forceLink().id(d => d.id).distance(100))
+                .force('charge', d3.forceManyBody().strength(-500))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(40))
+                .alphaDecay(0.05)
+                .velocityDecay(0.6);
+        }
+
+        // ---------- Graph creation ----------
+        function visualizeGraph() {
+            const numNodes = parseInt(document.getElementById('numNodes').value);
+            const edgesInput = document.getElementById('edges').value.trim();
+
+            if (!numNodes || numNodes < 2) { alert('At least 2 nodes required'); return; }
+
+            graphData = { nodes: [], links: [] };
+            adjacencyList = {};
+            resetAlgorithmState();
+
+            for (let i = 1; i <= numNodes; i++) {
+                graphData.nodes.push({ id: i, label: i });
+                adjacencyList[i] = [];
+            }
+
+            const lines = edgesInput.split('\n').map(l => l.trim()).filter(l => l);
+            lines.forEach(line => {
+                const [a, b] = line.split(/\s+/).map(Number);
+                if (a && b && a !== b && a <= numNodes && b <= numNodes) {
+                    graphData.links.push({ source: a, target: b });
+                    adjacencyList[a].push(b);
+                    adjacencyList[b].push(a);
+                }
+            });
+
+            updateStats();
+            initSVG();
+            renderGraph();
+            document.getElementById('startTraversal').disabled = false;
+            document.getElementById('stepControls').style.display = 'none';
+        }
+
+        function renderGraph() {
+            link = svg.append('g')
+                .selectAll('line')
+                .data(graphData.links)
+                .enter()
+                .append('line')
+                .attr('class', 'link');
+
+            const nodeGroup = svg.append('g')
+                .selectAll('g')
+                .data(graphData.nodes)
+                .enter()
+                .append('g')
+                .attr('class', 'node')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            node = nodeGroup.append('circle')
+                .attr('class', 'node-circle')
+                .attr('r', 15);
+
+            nodeLabel = nodeGroup.append('text')
+                .attr('class', 'node-label')
+                .text(d => d.label)
+                .style('display', showLabels ? 'block' : 'none');
+
+            nodeInfo = nodeGroup.append('text')
+                .attr('class', 'node-info')
+                .attr('dy', -25);
+
+            simulation.nodes(graphData.nodes).on('tick', ticked);
+            simulation.force('link').links(graphData.links);
+            simulation.alpha(1).restart();
+        }
+
+        function ticked() {
+            link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+            node.attr('cx', d => d.x).attr('cy', d => d.y);
+            nodeLabel.attr('x', d => d.x).attr('y', d => d.y);
+            nodeInfo.attr('x', d => d.x).attr('y', d => d.y);
+        }
+
+        function dragstarted(event) { if (!event.active) simulation.alphaTarget(0.3).restart(); event.subject.fx = event.subject.x; event.subject.fy = event.subject.y; }
+        function dragged(event) { event.subject.fx = event.x; event.subject.fy = event.y; }
+        function dragended(event) { if (!event.active) simulation.alphaTarget(0); event.subject.fx = null; event.subject.fy = null; }
+
+        // ---------- Algorithm state ----------
+        function resetAlgorithmState() {
+            discoveryTime = {}; lowLink = {}; parent = {}; visited = {};
+            articulationPoints = new Set(); bridges = []; biconnectedComponents = [];
+            time = 0; edgeStack = []; animationSteps = []; currentStep = 0;
+            isAnimating = false; stepLogs = []; clearSteps();
+            if (playInterval) clearInterval(playInterval);
+        }
+
+        // ---------- Steps panel ----------
+        function addStep(text) {
+            stepLogs.push(text);
+            const div = document.createElement('div');
+            div.className = 'step';
+            div.textContent = text;
+            document.getElementById('stepsList').appendChild(div);
+            div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        function clearSteps() { document.getElementById('stepsList').innerHTML = ''; stepLogs = []; }
+        function highlightCurrentStep(idx) {
+            document.querySelectorAll('#stepsList .step').forEach((s,i)=>s.classList.toggle('current', i===idx));
+        }
+
+        // ---------- Tarjan DFS ----------
+        function tarjanDFS(u, isRoot = false) {
+            visited[u] = true;
+            discoveryTime[u] = lowLink[u] = ++time;
+            let children = 0;
+
+            addStep(`Visit ${u} → disc=${discoveryTime[u]}, low=${lowLink[u]}`);
+            animationSteps.push({ type: 'visit', node: u, disc: discoveryTime[u], low: lowLink[u] });
+
+            for (let v of adjacencyList[u]) {
+                if (!visited[v]) {
+                    children++;
+                    parent[v] = u;
+                    edgeStack.push([u, v]);
+                    addStep(`Tree edge ${u}→${v}`);
+                    animationSteps.push({ type: 'tree-edge', edge: [u, v] });
+
+                    tarjanDFS(v);
+
+                    lowLink[u] = Math.min(lowLink[u], lowLink[v]);
+                    addStep(`Update low[${u}] = ${lowLink[u]}`);
+                    animationSteps.push({ type: 'update-low', node: u, low: lowLink[u] });
+
+                    // ----- Bridge -----
+                    if (lowLink[v] > discoveryTime[u]) {
+                        bridges.push([u, v]);
+                        addStep(`BRIDGE ${u}—${v}`);
+                        animationSteps.push({ type: 'bridge', edge: [u, v] });
+                    }
+
+                    // ----- Articulation point (non-root) -----
+                    if (!isRoot && lowLink[v] >= discoveryTime[u]) {
+                        articulationPoints.add(u);
+                        addStep(`ARTICULATION ${u}`);
+                    }
+
+                    // ----- BCC extraction (only when a cycle closes) -----
+                    if (lowLink[v] >= discoveryTime[u]) {
+                        const component = [];
+                        let edge;
+                        do {
+                            edge = edgeStack.pop();
+                            component.push(edge);
+                        } while (!((edge[0]===u && edge[1]===v) || (edge[0]===v && edge[1]===u)));
+                        biconnectedComponents.push(component);
+                        addStep(`BCC extracted (${component.length} edges)`);
+                    }
+
+                    // Root with >1 child
+                    if (isRoot && children > 1) articulationPoints.add(u);
+                }
+                else if (v !== parent[u]) {
+                    if (discoveryTime[v] < discoveryTime[u]) edgeStack.push([u, v]);
+                    lowLink[u] = Math.min(lowLink[u], discoveryTime[v]);
+                    addStep(`Back edge ${u}→${v} (disc=${discoveryTime[v]})`);
+                    animationSteps.push({ type: 'back-edge', edge: [u, v] });
+                    animationSteps.push({ type: 'update-low', node: u, low: lowLink[u] });
+                }
+            }
+
+            addStep(`Finish ${u}`);
+            animationSteps.push({ type: 'complete', node: u });
+        }
+
+        // ---------- Traversal entry ----------
+        function startTraversal() {
+            if (isAnimating) return;
+            resetAlgorithmState();
+            document.getElementById('startTraversal').disabled = true;
+            document.getElementById('stepControls').style.display = 'flex';
+
+            // Run DFS from every unvisited node (handles disconnected graphs)
+            for (let n of graphData.nodes) {
+                if (!visited[n.id]) tarjanDFS(n.id, true);
+            }
+
+            // Remaining edges belong to the last root's BCC
+            if (edgeStack.length > 0) {
+                const comp = [];
+                while (edgeStack.length) comp.push(edgeStack.pop());
+                if (comp.length) biconnectedComponents.push(comp);
+            }
+
+            // Mark articulation points in animation
+            articulationPoints.forEach(ap => animationSteps.push({ type: 'articulation', node: ap }));
+
+            isAnimating = true;
+            currentStep = 0;
+            animateStep();
+        }
+
+        // ---------- Animation core ----------
+        function animateStep() {
+            if (currentStep >= animationSteps.length) {
+                finishAnimation();
+                return;
+            }
+            const step = animationSteps[currentStep];
+            highlightCurrentStep(currentStep);
+
+            switch (step.type) {
+                case 'visit':
+                    highlightNode(step.node, 'visiting');
+                    updateNodeInfo(step.node, step.disc, step.low);
+                    break;
+                case 'tree-edge':
+                    highlightEdge(step.edge, 'tree-edge');
+                    break;
+                case 'back-edge':
+                    highlightEdge(step.edge, 'back-edge');
+                    break;
+                case 'update-low':
+                    updateNodeInfo(step.node, discoveryTime[step.node], step.low);
+                    break;
+                case 'complete':
+                    highlightNode(step.node, 'visited');
+                    break;
+                case 'bridge':
+                    highlightEdge(step.edge, 'bridge');
+                    break;
+                case 'articulation':
+                    highlightNode(step.node, 'articulation');
+                    break;
+            }
+            currentStep++;
+        }
+
+        function finishAnimation() {
+            isAnimating = false;
+            updateStats();
+            colorBiconnectedComponents();
+            if (playInterval) clearInterval(playInterval);
+            document.getElementById('playBtn').textContent = 'Play';
+        }
+
+        // ---------- Highlight helpers ----------
+        function highlightNode(id, cls) {
+            node.filter(d => d.id === id)
+                .classed('visiting', cls === 'visiting')
+                .classed('visited', cls === 'visited')
+                .classed('articulation', cls === 'articulation');
+        }
+        function highlightEdge(edge, cls) {
+            const [a,b] = edge;
+            link.filter(d =>
+                (d.source.id===a && d.target.id===b) ||
+                (d.source.id===b && d.target.id===a)
+            ).classed(cls, true);
+        }
+        function updateNodeInfo(id, disc, low) {
+            nodeInfo.filter(d => d.id === id).text(`[${disc},${low}]`);
+        }
+
+        // ---------- BCC coloring ----------
+        function colorBiconnectedComponents() {
+            const colors = d3.schemeCategory10;
+            const bridgeSet = new Set(bridges.map(e => `${Math.min(e[0],e[1])}-${Math.max(e[0],e[1])}`));
+
+            biconnectedComponents.forEach((comp, i) => {
+                const col = colors[i % colors.length];
+                comp.forEach(([u,v]) => {
+                    const key = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                    if (bridgeSet.has(key)) return; // skip bridges
+                    link.filter(d =>
+                        (d.source.id===u && d.target.id===v) ||
+                        (d.source.id===v && d.target.id===u)
+                    ).style('stroke', col).style('stroke-width', '4px');
+                });
+            });
+
+            // ensure bridges stay red
+            bridges.forEach(([u,v]) => highlightEdge([u,v], 'bridge'));
+        }
+
+        // ---------- Stats ----------
+        function updateStats() {
+            document.getElementById('statNodes').textContent = graphData.nodes.length;
+            document.getElementById('statEdges').textContent = graphData.links.length;
+            document.getElementById('statArticulation').textContent = articulationPoints.size;
+            document.getElementById('statBridges').textContent = bridges.length;
+            document.getElementById('statComponents').textContent = biconnectedComponents.length;
+        }
+
+        // ---------- UI helpers ----------
+        function restartLayout() { simulation.alpha(1).restart(); }
+        function toggleLabels() {
+            showLabels = !showLabels;
+            nodeLabel.style('display', showLabels ? 'block' : 'none');
+        }
+
+        // ---------- Step-by-step controls ----------
+        function nextStep() {
+            if (!isAnimating) return;
+            clearInterval(playInterval);
+            document.getElementById('playBtn').textContent = 'Play';
+            animateStep();
+        }
+        function prevStep() {
+            if (currentStep <= 0) return;
+            // simple reset-and-replay up to current-1 (good enough for demo)
+            resetAlgorithmState();
+            startTraversal();
+            currentStep = Math.max(0, currentStep - 2);
+            for (let i = 0; i < currentStep; i++) animateStep();
+        }
+        function playPause() {
+            if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+                document.getElementById('playBtn').textContent = 'Play';
+            } else {
+                playInterval = setInterval(() => {
+                    animateStep();
+                    if (!isAnimating) clearInterval(playInterval);
+                }, 800);
+                document.getElementById('playBtn').textContent = 'Pause';
+            }
+        }
+
+        // ---------- Export PNG ----------
+        function exportPNG() {
+            const serializer = new XMLSerializer();
+            const source = serializer.serializeToString(svg.node());
+            const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob(blob => {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'biconnected.png';
+                    a.click();
+                });
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        }
+
+        // ---------- Init ----------
+        window.onload = visualizeGraph;
+    </script>
+</body>
+</html>
